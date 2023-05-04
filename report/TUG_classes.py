@@ -351,6 +351,7 @@ def compute_kinematics(skeleton, tag):
 def compute_timing(skeleton, durata):
     dur = durata 
     nsigma = 3#5
+    win=5
 
     vel_shoulCenter_x, vel_shoulCenter_y, vel_shoulCenter_z, acc_shoulCenter_x, acc_shoulCenter_y, acc_shoulCenter_z= compute_kinematics(skeleton, "shoulderCenter")
     vel_hipCenter_x, vel_hipCenter_y, vel_hipCenter_z, acc_hipCenter_x, acc_hipCenter_y, acc_hipCenter_z = compute_kinematics(skeleton, "hipCenter")
@@ -359,24 +360,34 @@ def compute_timing(skeleton, durata):
     vel_shoulRight_x, vel_shoulRight_y, vel_shoulRight_z, acc_shoulRight_x, acc_shoulRight_y, acc_shoulRight_z = compute_kinematics(skeleton, "shoulderRight")
     vel_shoulLeft_x, vel_shoulLeft_y, vel_shoulLeft_z, acc_shoulLeft_x, acc_shoulLeft_y, acc_shoulLeft_z = compute_kinematics(skeleton, "shoulderLeft")
 
+    sc = skeleton.getKeypoint("shoulderCenter")
+    sc_filtered = scipy.signal.savgol_filter(sc, win, 2, axis=0)
+    hc = skeleton.getKeypoint("hipCenter")
+    hc_filtered = scipy.signal.savgol_filter(hc, win, 2, axis=0)
+    sr = skeleton.getKeypoint("shoulderRight")
+    sr_filtered = scipy.signal.savgol_filter(sr, win, 2, axis=0)
+    sl = skeleton.getKeypoint("shoulderLeft")
+    sl_filtered = scipy.signal.savgol_filter(sl, win, 2, axis=0)
+    ar = skeleton.getKeypoint("ankleRight")
+    ar_filtered = scipy.signal.savgol_filter(ar, win, 2, axis=0)
+    al = skeleton.getKeypoint("ankleLeft")
+    al_filtered = scipy.signal.savgol_filter(al, win, 2, axis=0)
+
+    plt.plot(sc_filtered[:,2])
+    plt.plot(hc_filtered[:,2])
+    plt.plot(al_filtered[:,1])
+    plt.plot(ar_filtered[:,1])
+
     ### Alzata ###
 
     # L'alzata inizia quando noto un'accelerazione in z del centro delle spalle e, 
     # contemporaneamente, una crescita della distanza in y tra il centro delle spalle 
     # e il centro delle anche (perche' ci si spinge in avanti, verso l'alto).
-    # init_mean= np.mean(acc_hipCenter_z[0:dur])
-    # init_std= np.std(acc_hipCenter_z[0:dur])
-    # cond1 = np.where(np.abs((acc_hipCenter_z-init_mean)/init_std) > nsigma)[0]
-    # cond2=np.where(np.diff(np.sign(acc_hipCenter_y-acc_shoulCenter_y)))[0]
 
-    # init_mean= np.mean(vel_hipCenter_z[0:dur])
-    # init_std= np.std(vel_hipCenter_z[0:dur])
-    # cond1 = np.where(np.abs((vel_hipCenter_z-init_mean)/init_std) > nsigma)[0]
-    # cond2=np.where(np.diff(np.sign(vel_hipCenter_y-vel_shoulCenter_y)))[0]
-
-    init_mean= np.mean(skeleton.getKeypoint('hipCenter')[0:dur,2])
-    init_std= np.std(skeleton.getKeypoint('hipCenter')[0:dur,2])
-    cond1 = np.where(np.abs((skeleton.getKeypoint('hipCenter')[:,2]-init_mean)/init_std) > nsigma)[0]
+    init_mean= np.mean(hc_filtered[0:dur,2])
+    init_std= np.std(hc_filtered[0:dur,2])
+    cond1 = np.where(np.abs((hc_filtered[:,2]-init_mean)/init_std) > nsigma)[0]
+    
     init_mean= np.mean(vel_shoulCenter_z[0:dur])
     init_std= np.std(vel_shoulCenter_z[0:dur])
     cond2 = np.where(np.abs((vel_shoulCenter_z-init_mean)/init_std) > nsigma)[0]
@@ -403,19 +414,18 @@ def compute_timing(skeleton, durata):
         cond1 = in_wf_Right_y_idx
     else:
         cond1 = in_wf_Left_y_idx
-    #cond2 = np.array(np.where(vel_hipCenter_y[in_stand_idx:]<0.))[0]+in_stand_idx-2#
-    init_mean= np.mean(skeleton.getKeypoint("shoulderCenter")[0:dur,2])
-    init_std= np.std(skeleton.getKeypoint("shoulderCenter")[0:dur,2])
-    cond2 = np.where(np.abs((skeleton.getKeypoint("shoulderCenter")[:,2]-init_mean)/init_std) > nsigma)[0]
+    
+    init_mean= np.mean(sc_filtered[0:dur,2])
+    init_std= np.std(sc_filtered[0:dur,2])
+    cond2 = np.where(np.abs((sc_filtered[:,2]-init_mean)/init_std) > nsigma)[0]
     in_wf_idx=np.intersect1d(cond1,cond2)[0]
-
 
     diff_vel_x=vel_shoulRight_x-vel_shoulLeft_x
     diff_acc_x=acc_shoulRight_x-acc_shoulLeft_x
     cond1= np.array(np.where(diff_acc_x>0))[0]
 
-    rfoot_cross3m = np.array(np.where(skeleton.getKeypoint("ankleRight")[:,1]<-2.5))[0]#
-    lfoot_cross3m = np.array(np.where(skeleton.getKeypoint("ankleLeft")[:,1]<-2.5))[0]#
+    rfoot_cross3m = np.array(np.where(ar_filtered[:,1]<-2.5))[0]#
+    lfoot_cross3m = np.array(np.where(al_filtered[:,1]<-2.5))[0]#
     if rfoot_cross3m[0]<lfoot_cross3m[0]:
         foot_cross3m = rfoot_cross3m
     else:
@@ -427,134 +437,70 @@ def compute_timing(skeleton, durata):
 
     # Correggo l'alzata
     vel_shoulCenter_z_flip= np.flip(vel_shoulCenter_z[0:in_wf_idx])
-    cond1 = np.where(np.abs(vel_shoulCenter_z_flip)< 0.005)[0]
+    cond1 = np.where(np.abs(vel_shoulCenter_z_flip)< 0.1)[0]
     vel_hipCenter_z_flip= np.flip(vel_hipCenter_z[0:in_wf_idx])
-    cond2 = np.where(np.abs(vel_hipCenter_z_flip)< 0.005)[0]
+    cond2 = np.where(np.abs(vel_hipCenter_z_flip)< 0.1)[0]
     
     in_stand_idx= np.intersect1d(cond1,cond2)[0]
     in_stand_idx= in_wf_idx-in_stand_idx
 
-
     ### Fase di rotazione 1 ###
 
-    # La fase di rotazione termina quando la distanza in x delle due spalle ritorna ai valori 
-    # iniziali e la velocita' in y del centro spalle e' positiva.
-    #diff_shoul = skeleton.getKeypoint("shoulderRight")[:,0]-skeleton.getKeypoint("shoulderLeft")[:,0]
-    #cond1= np.array(np.where(abs(diff_shoul[fin_wf_idx:]-abs(diff_shoul[0]))<0.1))[0]
-    
-    diff_shoul = abs(skeleton.getKeypoint("shoulderRight")[:,0]-skeleton.getKeypoint("shoulderLeft")[:,0])
-    init_diff_shoul= np.mean(diff_shoul[0:dur])
-    cond1= np.array(np.where(abs(diff_shoul[fin_wf_idx:]-init_diff_shoul)<0.1))[0]
-    cond2 = np.array(np.where(vel_shoulCenter_y[fin_wf_idx:]>0.))[0]#
-    fin_turn1_idx=np.intersect1d(cond1,cond2)[0]+fin_wf_idx
+    min_ankleR_y= min(ar_filtered[:,1])
+    min_ankleL_y= min(al_filtered[:,1])
+    cond1= np.array(np.where(ar_filtered[:,1]==min_ankleR_y))[0][0]
+    cond2= np.array(np.where(al_filtered[:,1]==min_ankleL_y))[0][0]
+    tmp_idx= max(cond1, cond2)
+
+    diff_shoul = abs(sr_filtered[:,0]-sl_filtered[:,0])
+    init_diff_shoul= np.mean(diff_shoul[fin_wf_idx-10:fin_wf_idx])
+    cond1= np.array(np.where(abs(diff_shoul[tmp_idx:]-init_diff_shoul)<0.05))[0]
+    dist_ankles=np.mean(abs(ar_filtered[fin_wf_idx-10:fin_wf_idx,0]-al_filtered[fin_wf_idx-10:fin_wf_idx,0]))
+    cond2 = np.array(np.where(abs(ar_filtered[tmp_idx:,0]-al_filtered[tmp_idx:,0]-dist_ankles)<0.1))[0]#
+    fin_turn1_idx=np.intersect1d(cond1,cond2)[0]+tmp_idx
 
     ### Camminata di ritorno ########################################################
 
-    # La fase di camminata di ritorno termina quando inizia la seconda rotazione.
-    # diff_acc_x=acc_shoulRight_x-acc_shoulLeft_x
-    # cond1= np.array(np.where(diff_acc_x[fin_turn1_idx:]<0))[0]
+    cond1= np.where(ar_filtered[fin_turn1_idx:,1]>-1.)
+    cond2= np.where(al_filtered[fin_turn1_idx:,1]>-1.)
+    min_reason_idx=np.intersect1d(cond1,cond2)[0]+fin_turn1_idx
 
-    # rfoot_cross0m = np.array(np.where(skeleton.getKeypoint("ankleRight")[fin_turn1_idx:,1]>0.))[0]#
-    # lfoot_cross0m = np.array(np.where(skeleton.getKeypoint("ankleLeft")[fin_turn1_idx:,1]>0.))[0]#
-    # if rfoot_cross0m[0]<lfoot_cross0m[0]:
-    #     foot_cross0m = rfoot_cross0m
-    # else:
-    #     foot_cross0m = lfoot_cross0m
-    # fin_wb_idx=np.intersect1d(cond1,foot_cross0m)[0]+fin_turn1_idx
-
-    # alternativa:
-
-    #diff_shoul = abs(skeleton.getKeypoint("shoulderRight")[:,0]-skeleton.getKeypoint("shoulderLeft")[:,0])
-    #cond1= np.array(np.where(diff_shoul[fin_turn1_idx:]<(diff_shoul[0]-0.1)))[0]
-    #cond1= np.array(np.where(abs(diff_shoul[fin_turn1_idx:]-diff_shoul[0])<0.05))[0]
-    #cond2 = np.array(np.where(vel_shoulCenter_y[fin_wf_idx:]>0.))[0]#
-    #diff_shoul = skeleton.getKeypoint("shoulderRight")[:,0]-skeleton.getKeypoint("shoulderLeft")[:,0]
-    #cond1= np.array(np.where(abs(diff_shoul[fin_turn1_idx:]-abs(diff_shoul[0]))>0.1))[0]
-    
-    diff_shoul = abs(skeleton.getKeypoint("shoulderRight")[:,0]-skeleton.getKeypoint("shoulderLeft")[:,0])
-    init_diff_shoul= np.mean(diff_shoul[0:dur])
-    cond1= np.array(np.where(abs(diff_shoul[fin_turn1_idx:]-init_diff_shoul)>0.1))[0]
-    #cond2 = np.array(np.where(vel_shoulCenter_y[fin_turn1_idx:]<0.))[0]#
-    #print(cond1)
-    #fin_wb_idx=np.intersect1d(cond1,cond2)[0]+fin_turn1_idx
-    fin_wb_idx=cond1[0]+fin_turn1_idx
-
-    #diff_shoul = skeleton.getKeypoint("shoulderRight")[:,0]-skeleton.getKeypoint("shoulderLeft")[:,0]
-    #cond1= np.array(np.where(abs(diff_shoul[fin_turn1_idx:]-abs(diff_shoul[0]))<0.05))[0]
-    #cond2 = np.array(np.where(vel_shoulCenter_y[fin_turn1_idx:]<0.))[0]#
-    #print('cond2')
-    #print(cond2)
-    #fin_wb_idx=np.intersect1d(cond1,cond2)[0]+fin_turn1_idx
+    diff_shoul = abs(sr_filtered[:,0]-sl_filtered[:,0])
+    init_diff_shoul= np.mean(diff_shoul[in_stand_idx:in_wf_idx])
+    cond1= np.array(np.where(abs(diff_shoul[min_reason_idx:]-init_diff_shoul)>0.1))[0]
+    cond2 = np.array(np.where(acc_shoulCenter_y[min_reason_idx:]<0.))[0]#
+    fin_wb_idx=np.intersect1d(cond1,cond2)[0]+min_reason_idx
+   
 
     ### Seconda rotazione ###########################################################
 
-    # La seconda rotazione termina quando noto una decelerazione in z del centro delle spalle e, 
-    # contemporaneamente, una diminuzione della distanza in y tra il centro delle spalle e il 
-    # centro delle anche (o che la velocita' in y delle anche e' maggiore di quella del centro 
-    # delle spalle perche' vado all'indietro).
-    # cond1 = np.where(vel_shoulCenter_z[fin_wb_idx:] < 0.)[0]
-    # #cond2=np.where(np.diff(np.sign(acc_hipCenter_y[fin_wb_idx:]-acc_shoulCenter_y[fin_wb_idx:])))[0]
-    # cond2=np.where(np.sign(vel_hipCenter_y[fin_wb_idx:]-vel_shoulCenter_y[fin_wb_idx:])>0)[0]
-    # fin_turn2_idx= np.intersect1d(cond1,cond2)[0]+fin_wb_idx
-
-    # alternativa:
-    #strikes,_ = scipy.signal.find_peaks(-acc_shoulCenter_z[fin_wb_idx:], height = 0.0, distance = 10)
-    #fin_turn2_idx = strikes[0]+fin_wb_idx
-
-    # alternativa:
-    diff_shoul = abs(skeleton.getKeypoint("shoulderRight")[:,0]-skeleton.getKeypoint("shoulderLeft")[:,0])
-    init_diff_shoul= np.mean(diff_shoul[0:dur])
-    cond1= np.array(np.where(abs(diff_shoul[fin_wb_idx:]-init_diff_shoul)<0.1))[0]
+    diff_shoul = abs(sr_filtered[:,0]-sl_filtered[:,0])
+    init_diff_shoul= np.mean(diff_shoul[in_stand_idx:in_wf_idx])
+    cond1= np.array(np.where(abs(diff_shoul[fin_wb_idx:]-init_diff_shoul)<0.05))[0]
     cond2 = np.array(np.where(vel_shoulCenter_y[fin_wb_idx:]>0.))[0]#
-    fin_turn2_idx=np.intersect1d(cond1,cond2)[0]+fin_wb_idx
+    temp_idx=np.intersect1d(cond1,cond2)[0]+fin_wb_idx
+
+
+    in_mean= np.mean(al_filtered[in_stand_idx-10:in_stand_idx,1])
+    in_std= np.std(al_filtered[in_stand_idx-10:in_stand_idx,1])
+    cond1 = np.where(np.abs((al_filtered[temp_idx:,1]-in_mean)/in_std) < nsigma)[0]
+    in_mean= np.mean(ar_filtered[in_stand_idx-10:in_stand_idx,1])
+    in_std= np.std(ar_filtered[in_stand_idx-10:in_stand_idx,1])
+    cond2 = np.where(np.abs((ar_filtered[temp_idx:,1]-in_mean)/in_std) < nsigma)[0]
+    fin_turn2_idx=np.intersect1d(cond1,cond2)[0]+temp_idx
 
     ### Fine ###
 
-    # zero_vel = np.where(np.diff(np.sign(vel_shoulCenter_z[fin_turn2_idx:])))[0]
-    # in_sit_idx= fin_turn2_idx + zero_vel[0]
-    # init_mean= np.mean(acc_shoulCenter_z[:dur])
-    # init_std= np.std(acc_shoulCenter_z[:dur])
-    # cond1 = np.where(np.abs((acc_shoulCenter_z[fin_turn2_idx:]-init_mean)/init_std) < nsigma)[0]
-    # print('cond1')
-    # print(cond1)
-    # init_mean= np.mean(skeleton.getKeypoint("shoulderCenter")[:dur,2])
-    # init_std= np.std(skeleton.getKeypoint("shoulderCenter")[:dur,2])
-    # cond2 = np.where(np.abs((skeleton.getKeypoint("shoulderCenter")[fin_turn2_idx:,2]-init_mean)/init_std) < nsigma)[0]
-    # print('cond2')
-    # print(cond2)
-    # elem=np.intersect1d(cond1,cond2)
-    # if (elem==0): 
-    #     fin_sit_idx = len(skeleton.getKeypoint("shoulderCenter"))-1
-    # else:
-    #     fin_sit_idx = fin_turn2_idx + elem[0]
-
-
-    # # alternativa:    
-    # init_mean= np.mean(acc_hipCenter_z[:dur])
-    # init_std= np.std(acc_hipCenter_z[:dur])
-    # cond1 = np.where(np.abs((acc_hipCenter_z[fin_turn2_idx:]-init_mean)/init_std) < nsigma)[0]
-    # # init_mean= np.mean(skeleton.getKeypoint("hipCenter")[:dur,2])
-    # # init_std= np.std(skeleton.getKeypoint("hipCenter")[:dur,2])
-    # # cond2 = np.where(np.abs((skeleton.getKeypoint("hipCenter")[fin_turn2_idx:,2]-init_mean)/init_std) < nsigma)[0]
-    # init_mean= np.mean(acc_shoulCenter_z[:dur])
-    # init_std= np.std(acc_shoulCenter_z[:dur])
-    # cond1 = np.where(np.abs((acc_shoulCenter_z[fin_turn2_idx:]-init_mean)/init_std) < nsigma)[0]
-    # print(cond1)
-    # print(cond2)
-
-    in_velhipC_z_mean= np.mean(vel_hipCenter_z[:dur])
-    in_velhipC_z_std= np.std(vel_hipCenter_z[:dur])
+    in_velhipC_z_mean= np.mean(vel_hipCenter_z[in_stand_idx-10:in_stand_idx])
+    in_velhipC_z_std= np.std(vel_hipCenter_z[in_stand_idx-10:in_stand_idx])
     cond1 = np.where(np.abs((vel_hipCenter_z[fin_turn2_idx:]-in_velhipC_z_mean)/in_velhipC_z_std) < nsigma)[0]
-    #init_mean= np.mean(vel_shoulCenter_z[:dur])
-    #init_std= np.std(vel_shoulCenter_z[:dur])
-    #cond2 = np.where(np.abs((vel_shoulCenter_z[fin_turn2_idx:]-init_mean)/init_std) < nsigma)[0]
-    in_shoulC_z_mean= np.mean(skeleton.getKeypoint("shoulderCenter")[:dur,2])
-    in_shoulC_z_std= np.std(skeleton.getKeypoint("shoulderCenter")[:dur,2])
-    cond2 = np.where(np.abs((skeleton.getKeypoint("shoulderCenter")[fin_turn2_idx:,2]-in_shoulC_z_mean)/in_shoulC_z_std) < nsigma)[0]
-    
+    in_shoulC_z_mean= np.mean(sc_filtered[in_stand_idx-10:in_stand_idx,2])
+    in_shoulC_z_std= np.std(sc_filtered[in_stand_idx-10:in_stand_idx,2])
+    cond2 = np.where(np.abs((sc_filtered[fin_turn2_idx:,2]-in_shoulC_z_mean)/in_shoulC_z_std) < nsigma)[0]
+   
     elem=np.intersect1d(cond1,cond2)[0]
     if (elem.size==0): 
-        fin_sit_idx = len(skeleton.getKeypoint("hipCenter"))-1
+        fin_sit_idx = len(hc_filtered[:,2])-1
     else:
         fin_sit_idx = fin_turn2_idx + elem
 
