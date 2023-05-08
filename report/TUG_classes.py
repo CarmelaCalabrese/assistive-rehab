@@ -230,7 +230,7 @@ class Step(Metric):
         phases_names= ['Standing', 'Walking forward', 'Turning1', 'Walking backward', 'Turning2', 'Sitting']
 
 
-        win=10
+        win=5 #10
         alj = skeleton.getKeypoint("ankleLeft")
         alj_filtered = scipy.signal.savgol_filter(alj, win, 2, axis=0)
         arj = skeleton.getKeypoint("ankleRight")
@@ -298,7 +298,9 @@ class Step(Metric):
             results[phases_names[i]]['acceleration_z']= self.speed_z/self.ex_time
 
         results['Full TUG']={}  
-        self.nsteps = len(self.strikes)
+        tmp_idx=np.intersect1d(np.where(self.strikes>timing_vec[0]), np.where(self.strikes<timing_vec[-1]))
+        self.nsteps = len(self.strikes[tmp_idx])  
+        #self.nsteps = len(self.strikes)
         results['Full TUG']['nsteps']=self.nsteps
         self.walking_time = timing_vec2[-2] - timing_vec2[1] #Durata totale del test: calcolata in automatico da quando il paziente si alza (gli ischi si staccano dalla sedia) a quando si risiede (gli ischi si appoggiano sulla sedia)
         results['Full TUG']['walk_time']=self.walking_time
@@ -391,8 +393,7 @@ def compute_timing(skeleton, durata):
     init_mean= np.mean(vel_shoulCenter_z[0:dur])
     init_std= np.std(vel_shoulCenter_z[0:dur])
     cond2 = np.where(np.abs((vel_shoulCenter_z-init_mean)/init_std) > nsigma)[0]
-    #cond2=np.where(np.diff(np.sign(skeleton.getKeypoint('hipCenter')[0:dur,1]-skeleton.getKeypoint('shoulderCenter')[0:dur,1])))[0]
-
+    
     in_stand_idx= np.intersect1d(cond1,cond2)[0]
 
 
@@ -480,29 +481,40 @@ def compute_timing(skeleton, durata):
     cond2 = np.array(np.where(vel_shoulCenter_y[fin_wb_idx:]>0.))[0]#
     temp_idx=np.intersect1d(cond1,cond2)[0]+fin_wb_idx
 
+    in_wf_Right_y_idx = np.where(vel_ankleRight_y[temp_idx:] > 0)[0]-2
+    in_wf_Left_y_idx = np.where(vel_ankleLeft_y[temp_idx:] > 0)[0]-2
 
-    in_mean= np.mean(al_filtered[in_stand_idx-10:in_stand_idx,1])
-    in_std= np.std(al_filtered[in_stand_idx-10:in_stand_idx,1])
-    cond1 = np.where(np.abs((al_filtered[temp_idx:,1]-in_mean)/in_std) < nsigma)[0]
-    in_mean= np.mean(ar_filtered[in_stand_idx-10:in_stand_idx,1])
-    in_std= np.std(ar_filtered[in_stand_idx-10:in_stand_idx,1])
-    cond2 = np.where(np.abs((ar_filtered[temp_idx:,1]-in_mean)/in_std) < nsigma)[0]
-    fin_turn2_idx=np.intersect1d(cond1,cond2)[0]+temp_idx
+    if in_wf_Right_y_idx[0]<in_wf_Left_y_idx[0]:
+        cond1 = in_wf_Right_y_idx
+    else:
+        cond1 = in_wf_Left_y_idx
+
+    init_mean= np.mean(sc_filtered[fin_wf_idx:fin_turn1_idx,2])
+    init_std= np.std(sc_filtered[fin_wf_idx:fin_turn1_idx,2])
+    cond2 = np.where(np.abs((sc_filtered[temp_idx:,2]-init_mean)/init_std) > nsigma)[0]
+
+    fin_turn2_idx= np.intersect1d(cond1,cond2)[0]+temp_idx
+    
 
     ### Fine ###
 
-    in_velhipC_z_mean= np.mean(vel_hipCenter_z[in_stand_idx-10:in_stand_idx])
-    in_velhipC_z_std= np.std(vel_hipCenter_z[in_stand_idx-10:in_stand_idx])
-    cond1 = np.where(np.abs((vel_hipCenter_z[fin_turn2_idx:]-in_velhipC_z_mean)/in_velhipC_z_std) < nsigma)[0]
     in_shoulC_z_mean= np.mean(sc_filtered[in_stand_idx-10:in_stand_idx,2])
     in_shoulC_z_std= np.std(sc_filtered[in_stand_idx-10:in_stand_idx,2])
     cond2 = np.where(np.abs((sc_filtered[fin_turn2_idx:,2]-in_shoulC_z_mean)/in_shoulC_z_std) < nsigma)[0]
-   
+    temp_idx=cond2[0]+fin_turn2_idx
+
+    in_velhipC_z_mean= np.mean(vel_hipCenter_z[in_stand_idx-10:in_stand_idx])
+    in_velhipC_z_std= np.std(vel_hipCenter_z[in_stand_idx-10:in_stand_idx])
+    cond1 = np.where(np.abs((vel_hipCenter_z[temp_idx:]-in_velhipC_z_mean)/in_velhipC_z_std) < nsigma)[0]
+    in_velshoulC_z_mean= np.mean(vel_shoulCenter_z[in_stand_idx-10:in_stand_idx])
+    in_velshoulC_z_std= np.std(vel_shoulCenter_z[in_stand_idx-10:in_stand_idx])
+    cond2 = np.where(np.abs((vel_shoulCenter_z[temp_idx:]-in_velshoulC_z_mean)/in_velshoulC_z_std) < nsigma)[0]
+    
     elem=np.intersect1d(cond1,cond2)[0]
     if (elem.size==0): 
         fin_sit_idx = len(hc_filtered[:,2])-1
     else:
-        fin_sit_idx = fin_turn2_idx + elem
+        fin_sit_idx = temp_idx + elem
 
     return in_stand_idx, in_wf_idx, fin_wf_idx, fin_turn1_idx, fin_wb_idx, fin_turn2_idx, fin_sit_idx
 
